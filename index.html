@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mood Detection</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background: linear-gradient(135deg, #f6d365, #fda085);
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0px 5px 15px rgba(0, 0, 0, 0.2);
+            max-width: 500px;
+            margin: auto;
+        }
+
+        video, img {
+            width: 100%;
+            max-height: 300px;
+            border-radius: 10px;
+            margin-top: 10px;
+        }
+
+        canvas {
+            display: none;
+        }
+
+        .btn {
+            background: #ff7e5f;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            margin: 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .btn:hover {
+            background: #e05640;
+        }
+
+        #loader {
+            display: none;
+            margin-top: 10px;
+        }
+        
+        #mood-result {
+            font-size: 18px;
+            font-weight: bold;
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+        }
+
+    </style>
+</head>
+<body>
+
+    <h2>Fast Mood Detection</h2>
+    
+    <div class="container">
+        <video id="video" autoplay></video>
+        <img id="uploadedImage" style="display: none;">
+        <canvas id="canvas"></canvas>
+
+        <br>
+
+        <input type="file" id="imageUpload" accept="image/*" class="btn">
+        <button class="btn" id="capture">Capture from Webcam</button>
+        <button class="btn" id="detectMood">Detect Mood</button>
+
+        <p id="mood-result"></p>
+        <img id="loader" src="https://i.gifer.com/ZZ5H.gif" width="50">
+    </div>
+
+    <script>
+      
+const video = document.getElementById('video');
+const imageUpload = document.getElementById('imageUpload');
+const captureButton = document.getElementById('capture');
+const detectMoodButton = document.getElementById('detectMood');
+const loader = document.getElementById('loader');
+const moodResult = document.getElementById('mood-result');
+const canvas = document.createElement('canvas');
+const ctx = canvas.getContext('2d');
+
+const apiKey = 'unxzGJlkywFmtByOROmDu20wahM_cU_m';
+const apiSecret = 'G3R03ni8EupyA9mvswGQJN5P3Qq0Nu8Z';
+
+let imageData = null; // Store image data to process later
+
+// Start Webcam
+navigator.mediaDevices.getUserMedia({ video: true })
+    .then(stream => {
+        video.srcObject = stream;
+    })
+    .catch(error => console.error('Error accessing webcam:', error));
+
+// Capture Image from Webcam
+captureButton.addEventListener('click', () => {
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    imageData = canvas.toDataURL('image/jpeg', 0.7);
+});
+
+// Upload Image File
+imageUpload.addEventListener('change', event => {
+    const file = event.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const img = new Image();
+            img.src = reader.result;
+            img.onload = () => {
+                const MAX_WIDTH = 300;
+                const MAX_HEIGHT = 300;
+                let width = img.width;
+                let height = img.height;
+
+                if (width > height) {
+                    if (width > MAX_WIDTH) {
+                        height *= MAX_WIDTH / width;
+                        width = MAX_WIDTH;
+                    }
+                } else {
+                    if (height > MAX_HEIGHT) {
+                        width *= MAX_HEIGHT / height;
+                        height = MAX_HEIGHT;
+                    }
+                }
+                
+                canvas.width = width;
+                canvas.height = height;
+                ctx.drawImage(img, 0, 0, width, height);
+                imageData = canvas.toDataURL('image/jpeg', 0.7);
+            };
+        };
+        reader.readAsDataURL(file);
+        
+        // Stop webcam stream when uploading an image
+        if (video.srcObject) {
+            video.srcObject.getTracks().forEach(track => track.stop());
+        }
+    }
+});
+
+// Detect Mood when clicked
+detectMoodButton.addEventListener('click', () => {
+    if (imageData) {
+        analyzeMood(imageData);
+    } else {
+        moodResult.innerText = 'Please upload or capture an image first!';
+        moodResult.style.opacity = '1';
+    }
+});
+
+// Analyze Mood with Face++ API
+async function analyzeMood(imageData) {
+    loader.style.display = 'block';
+    moodResult.style.opacity = '0';
+
+    try {
+        const response = await fetch('https://api-us.faceplusplus.com/facepp/v3/detect', {
+            method: 'POST',
+            body: new URLSearchParams({
+                api_key: apiKey,
+                api_secret: apiSecret,
+                image_base64: imageData.split(',')[1],
+                return_attributes: 'emotion'
+            })
+        });
+
+        if (!response.ok) throw new Error('API Request Failed');
+
+        const result = await response.json();
+        loader.style.display = 'none';
+
+        if (result.faces && result.faces.length > 0) {
+            const emotions = result.faces[0].attributes.emotion;
+            const detectedMood = Object.keys(emotions).reduce((a, b) => emotions[a] > emotions[b] ? a : b);
+            moodResult.innerText = `Detected Mood: ${detectedMood.toUpperCase()} 😊`;
+            moodResult.style.opacity = '1';
+        } else {
+            moodResult.innerText = 'No face detected. Try again.';
+            moodResult.style.opacity = '1';
+        }
+    } catch (error) {
+        loader.style.display = 'none';
+        moodResult.innerText = 'Error detecting mood. Please try again!';
+        moodResult.style.opacity = '1';
+        console.error('Error:', error);
+    }
+}
+</script>
+
+
+    </script>
+
+</body>
+</html>
